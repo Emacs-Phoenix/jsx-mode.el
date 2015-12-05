@@ -907,7 +907,7 @@ cf. https://github.com/auto-complete/popup-el/issues/43"
   (if jsx-use-flymake
       (jsx-flymake-on)))
 
-;;
+
 
 (provide 'jsx-mode)
 ;;; jsx-mode.el ends here
