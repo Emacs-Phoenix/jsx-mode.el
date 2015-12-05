@@ -119,10 +119,8 @@ The value should be \"parse\" or \"compile\". (Default: \"parse\")"
 
 (defvar jsx-mode-map
   (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "C-c C-c") 'comment-region)
     (define-key map (kbd "C-c c") 'jsx-compile-file)
     (define-key map (kbd "C-c C") 'jsx-compile-file-async)
-    (define-key map (kbd "C-c C-r") 'jsx-run-buffer)
     map))
 
 (defvar jsx-mode-syntax-table
@@ -147,7 +145,8 @@ The value should be \"parse\" or \"compile\". (Default: \"parse\")"
     "NaN"
     "false"
     "null"
-    "this" "true"
+    "this"
+    "true"
     "undefined"))
 
 (defconst jsx--keywords
@@ -167,7 +166,8 @@ The value should be \"parse\" or \"compile\". (Default: \"parse\")"
     "import"    "implements"
     "interface" "static"
     "__FILE__"  "__LINE__"
-    "undefined")
+    "undefined"
+    )
   "keywords defined in parser.js of JSX")
 
 (defconst jsx--reserved-words
@@ -182,7 +182,11 @@ The value should be \"parse\" or \"compile\". (Default: \"parse\")"
     "extern"    "native"
     "trait"     "using"
     "as"        "is"
-    "operator"  "package")
+    "operator"  "package"
+    ;; keywords of React
+    "render"
+    ;; keywords for radium
+    "@Radium")
   "reserved words defined in parser.js of JSX")
 
 (defconst jsx--contextual-keywords
@@ -275,17 +279,17 @@ The value should be \"parse\" or \"compile\". (Default: \"parse\")"
    "\\)"))
 
 (defconst jsx--class-definition-re
-      (concat
-       (regexp-opt jsx--class-definitions 'words)
-       "\\s-+\\(" jsx--identifier-re "\\)"))
+  (concat
+   (regexp-opt jsx--class-definitions 'words)
+   "\\s-+\\(" jsx--identifier-re "\\)"))
 
 (defconst jsx--create-instance-re
-      (concat
-       "\\<new\\s-+"
-       ;; call 'new foo.Foo' to create a Foo class instance defined in foo.jsx
-       ;; if import "foo.jsx" into foo
-       "\\(?:" jsx--identifier-re "\\.\\)?"
-       "\\(" jsx--identifier-re "\\)"))
+  (concat
+   "\\<new\\s-+"
+   ;; call 'new foo.Foo' to create a Foo class instance defined in foo.jsx
+   ;; if import "foo.jsx" into foo
+   "\\(?:" jsx--identifier-re "\\.\\)?"
+   "\\(" jsx--identifier-re "\\)"))
 
 ;; class name of the return value like function createFoo() : Foo {
 (defconst jsx--return-class-re
@@ -379,7 +383,7 @@ The value should be \"parse\" or \"compile\". (Default: \"parse\")"
     ;;     J {
     ,(list
       (concat
-        "^\\s-*\\(" jsx--identifier-re "\\)\\(?:\\s-\\|$\\)")
+       "^\\s-*\\(" jsx--identifier-re "\\)\\(?:\\s-\\|$\\)")
       (list (concat "\\<" jsx--identifier-re "\\>")
             '(if (save-excursion
                    (jsx--backward-non-comment-word 2)
@@ -404,12 +408,12 @@ The value should be \"parse\" or \"compile\". (Default: \"parse\")"
 
     ;; color classes of function arugments like function(:int, :int)
     ,(list
-     (concat
-      "\\<function\\>\\s-*(\\s-*")
-     (list (concat "\\s-*:\\s-*\\(" jsx--identifier-re "\\)")
-           '(unless (jsx--in-arg-definition-p) (end-of-line))
-           nil
-           '(1 font-lock-type-face)))
+      (concat
+       "\\<function\\>\\s-*(\\s-*")
+      (list (concat "\\s-*:\\s-*\\(" jsx--identifier-re "\\)")
+            '(unless (jsx--in-arg-definition-p) (end-of-line))
+            nil
+            '(1 font-lock-type-face)))
 
     ;; color function arguments
     ;;     function(a: int,
@@ -471,13 +475,28 @@ The value should be \"parse\" or \"compile\". (Default: \"parse\")"
 (defun jsx--non-block-statement-p ()
   (save-excursion
     (jsx--go-to-previous-non-comment-char)
-    (or (string-match-p "\\(?:do\\|else\\)\\_>" (or (word-at-point) ""))
+    (or (string-match-p "\\(?:do\\|else\\|\{\\)\\_>" (or (word-at-point) ""))
         (and (= (char-after) ?\))
              (progn
                (forward-char)
                (backward-list)
                (backward-word)
                (looking-at "\\(?:for\\|if\\|while\\)\\_>"))))))
+
+(defun jsx--in-xml-child-p ()
+  (save-excursion
+    (jsx--go-to-previous-non-comment-char)
+    ;;back-to-indentation
+    (back-to-indentation)
+    (eq (char-after) ?<)))
+
+(defun jsx--in-xml-bro-p ()
+  (save-excursion
+    (jsx--go-to-previous-non-comment-char)
+    ;;back-to-indentation
+    (string-match-p "\\(/\>\\|\</\\)" (or (thing-at-point 'line) ""))))
+
+
 
 (defun jsx--in-condition-p ()
   (when (list-at-point)
@@ -577,6 +596,22 @@ If LEVEL is larger than the current depth, the ourermost leve is used."
              (jsx--go-to-previous-non-comment-char)
              (current-indentation))
            jsx-indent-level))
+
+       ((jsx--in-xml-bro-p)
+        (progn
+          
+          (jsx--go-to-previous-non-comment-char)  
+          (current-indentation)))       
+       
+       ((jsx--in-xml-child-p)
+        
+        (+ (progn
+             (jsx--go-to-previous-non-comment-char)
+             (current-indentation))
+           jsx-indent-level))
+
+
+       
        ((or (jsx--in-arg-definition-p) (jsx--in-condition-p))
         (progn
           (jsx--go-to-previous-non-comment-char)
@@ -792,18 +827,18 @@ if there are any errors or warnings in `jsx-mode'."
             for word = (assoc-default 'word info)
             for name = word
             when (and prev-word (not (equal word prev-word)))
-              collect (propertize prev-word 'docs docs 'symbol symbol)
-                into candidates
-                and do (setq docs)
-                and do (setq symbol)
+            collect (propertize prev-word 'docs docs 'symbol symbol)
+            into candidates
+            and do (setq docs)
+            and do (setq symbol)
             do (when args
                  (setq symbol "f")
                  (setq name (jsx--make-method-string
                              word (cdr args) (assoc-default 'returnType info))))
             collect `((name . ,name) (desc . ,desc)) into docs
             finally return
-                    (nconc candidates
-                           (list (propertize word 'docs docs 'symbol symbol)))))))
+            (nconc candidates
+                   (list (propertize word 'docs docs 'symbol symbol)))))))
 
 (defun jsx--get-candidates ()
   (let* ((tmpfile (jsx--copy-buffer-to-tmp-file))
@@ -850,9 +885,9 @@ cf. https://github.com/auto-complete/popup-el/issues/43"
                    (setq names (format "%s\n%s" names (assoc-default 'name doc)))
                  (setq names (assoc-default 'name doc)))
             finally return
-                    (if document
-                        (format "%s\n\n%s\n\n%s" document names desc)
-                        (format "%s\n\n%s" names desc))))))
+            (if document
+                (format "%s\n\n%s\n\n%s" document names desc)
+              (format "%s\n\n%s" names desc))))))
 
 
 ;;;###autoload
