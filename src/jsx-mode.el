@@ -331,6 +331,16 @@ The value should be \"parse\" or \"compile\". (Default: \"parse\")"
   (concat
    "import\\s-+" jsx--quoted-re "\\s-+\\(into\\)"))
 
+;; (defconst jsx--xml-tag-re
+;;   (concat))
+
+(defconst jsx--html-font-lock-keywords
+  (list
+   '("\\(<[^>]*>\\)+" . font-lock-comment-face)
+   '("[Hh][Rr][Ee][Ff]=\"\\([^\"]*\\)\"" 1 font-lock-string-face t)
+   '("[Ss][Rr][Cc]=\"\\([^\"]*\\)\"" 1 font-lock-string-face t))
+  "Patterns to highlight in HTML buffers."
+  )
 
 (defun jsx--in-arg-definition-p ()
   (when (list-at-point)
@@ -348,6 +358,10 @@ The value should be \"parse\" or \"compile\". (Default: \"parse\")"
     (,jsx--builtin-function-re 1 font-lock-builtin-face)
     (,jsx--regex-literal-re 3 font-lock-string-face)
     (,jsx--variable-definition-re 1 font-lock-variable-name-face)
+
+    
+    
+    
     (,jsx--primitive-type-re 0 font-lock-type-face)
     (,jsx--reserved-class-re 1 font-lock-type-face)
     (,jsx--keywords-re 0 font-lock-keyword-face)
@@ -454,6 +468,8 @@ The value should be \"parse\" or \"compile\". (Default: \"parse\")"
                (end-of-line))
             nil
             '(1 font-lock-type-face)))
+
+
 
     ;; function names should be colored after coloring arguments,
     ;; otherwise arguments will be colored
